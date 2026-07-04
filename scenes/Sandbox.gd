@@ -14,25 +14,65 @@ const TILE_ATLAS_COORDS := {
 const TOWER_SCENE := preload("res://scenes/Tower.tscn")
 
 var current_phase: Phase = Phase.PLACEMENT
+var attack_queue: Array[Tower] = []
 var current_player: int = 1
 var turn_number: int = 1
+var current_attacker: Tower = null
+var current_targets: Array[Tower] = []
 
 func _ready() -> void:
 	print("[Phase] PLACEMENT — Player ", current_player)
+	draw_grid_labels()
+	
+func draw_grid_labels() -> void:
+	var used_rect := ground_layer.get_used_rect()
+	var tile_size := ground_layer.tile_set.tile_size
+
+	for x in range(used_rect.position.x, used_rect.end.x):
+		var label := Label.new()
+		label.text = str(x)
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.custom_minimum_size = Vector2(tile_size.x, 0)
+		var world_pos := ground_layer.map_to_local(Vector2i(x, used_rect.end.y))
+		label.position = world_pos - Vector2(tile_size.x / 2.0, 14)
+		add_child(label)
+
+	for y in range(used_rect.position.y, used_rect.end.y):
+		var label := Label.new()
+		label.text = str(y)
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		label.custom_minimum_size = Vector2(0, tile_size.y)
+		var world_pos := ground_layer.map_to_local(Vector2i(used_rect.end.x, y))
+		label.position = world_pos - Vector2(14, tile_size.y / 2.0)
+		add_child(label)
 
 func _unhandled_input(event: InputEvent) -> void:
-	if current_phase != Phase.PLACEMENT:
+	if not (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT):
 		return
-	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		
+	if current_phase == Phase.PLACEMENT:
 		var mouse_pos := get_global_mouse_position()
 		var cell := ground_layer.local_to_map(mouse_pos)
-		place_tower(cell)
+		if is_valid_ground(cell):
+			place_tower(cell)
+	elif current_phase == Phase.ATTACK and current_attacker != null:
+		var mouse_pos := get_global_mouse_position()
+		var clicked_cell := ground_layer.local_to_map(mouse_pos)
+		for t in current_targets:
+			if t.grid_position == clicked_cell:
+				resolve_attack(t)
+				return
+				
+func is_valid_ground(cell: Vector2i) -> bool:
+	return ground_layer.get_cell_source_id(cell) != -1
 
 func place_tower(cell: Vector2i) -> void:
 	var tower := TOWER_SCENE.instantiate()
 	tower.position = ground_layer.map_to_local(cell)
 	tower.grid_position = cell
 	tower.owner_id = current_player
+	tower.owner_id = current_player
+	tower.apply_owner_color()
 
 	var counts := scan_proximity(cell, 1)
 	var stats := compute_stats(counts)
@@ -48,9 +88,68 @@ func place_tower(cell: Vector2i) -> void:
 func start_attack_phase() -> void:
 	current_phase = Phase.ATTACK
 	print("[Phase] ATTACK — Player ", current_player)
-	# Batch C will fill this in with a real tower queue.
-	# Stub for now: immediately move on.
-	start_activation_phase()
+
+	attack_queue.clear()
+	for tower in get_children():
+		if tower is Tower and tower.owner_id == current_player and tower.state == Tower.TowerState.ACTIVE:
+			attack_queue.append(tower)
+
+	print("  Attack queue: ", attack_queue.size(), " tower(s)")
+	process_next_attacker()
+	
+func process_next_attacker() -> void:
+	if attack_queue.is_empty():
+		print("  Attack phase complete")
+		current_attacker = null
+		current_targets = []
+		start_activation_phase()
+		return
+
+	current_attacker = attack_queue.pop_front()
+	current_targets = find_targets_in_range(current_attacker)
+
+	current_attacker.set_highlight(Color.YELLOW)
+	for t in current_targets:
+		t.set_highlight(Color.RED)
+
+	print("  Tower at ", current_attacker.grid_position, " is up — ", current_targets.size(), " target(s) in range")
+	print("  Click a highlighted target, or press Skip/Rest.")
+	# Execution pauses here — waiting for input. No more self-call.
+	
+func find_targets_in_range(attacker: Tower) -> Array[Tower]:
+	var targets: Array[Tower] = []
+	for tower in get_children():
+		if tower is Tower and tower.owner_id != attacker.owner_id and tower.state == Tower.TowerState.ACTIVE:
+			var distance := grid_distance(attacker.grid_position, tower.grid_position)
+			if distance <= attacker.range_stat:
+				targets.append(tower)
+	return targets
+	
+func resolve_attack(target: Tower) -> void:
+	print("  Tower at ", current_attacker.grid_position, " attacks tower at ", target.grid_position, " for ", current_attacker.damage, " damage")
+	target.armor -= current_attacker.damage
+	print("    Target armor now: ", target.armor)
+
+	if target.armor <= 0:
+		print("    Tower at ", target.grid_position, " destroyed!")
+		target.queue_free()
+
+	finish_current_attacker()
+
+func skip_attack() -> void:
+	print("  Tower at ", current_attacker.grid_position, " skips/rests")
+	finish_current_attacker()
+
+func finish_current_attacker() -> void:
+	current_attacker.clear_highlight()
+	for t in current_targets:
+		if is_instance_valid(t):
+			t.clear_highlight()
+	process_next_attacker()
+	
+func _on_skip_button_pressed() -> void:
+	if current_phase == Phase.ATTACK and current_attacker != null:
+		skip_attack()
 
 func start_activation_phase() -> void:
 	current_phase = Phase.ACTIVATION
@@ -94,3 +193,6 @@ func compute_stats(counts: Dictionary) -> Dictionary:
 		"damage": 1 + counts[ResourceType.ORE],
 		"range": 1 + counts[ResourceType.TREE],
 	}
+	
+func grid_distance(a: Vector2i, b: Vector2i) -> int:
+	return max(abs(a.x - b.x), abs(a.y - b.y))
