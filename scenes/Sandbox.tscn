@@ -1,7 +1,7 @@
 [gd_scene format=4 uid="uid://drvt0e1myjx7y"]
 
 [ext_resource type="Texture2D" uid="uid://d3v15tgapl0yv" path="res://assets/tiles.png" id="1_2ddto"]
-[ext_resource type="Script" uid="uid://dqm87ay4sy4h" path="res://scenes/sandbox.gd" id="1_rgld7"]
+[ext_resource type="Script" uid="uid://djpdrt0b54ka5" path="res://scenes/Sandbox.gd" id="1_rgld7"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_rgld7"]
 texture = ExtResource("1_2ddto")

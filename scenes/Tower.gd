@@ -1,4 +1,6 @@
 extends Node2D
+class_name Tower
+
 
 enum TowerState { PENDING, ACTIVE }
 

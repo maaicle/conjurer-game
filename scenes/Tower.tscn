@@ -1,10 +1,10 @@
 [gd_scene format=3 uid="uid://bcerjjda47top"]
 
 [ext_resource type="Texture2D" uid="uid://bbcc0kfv4y18d" path="res://assets/tower.png" id="1_2x682"]
-[ext_resource type="Script" uid="uid://dk0qv3voaeky" path="res://scenes/tower.gd" id="1_ay4al"]
+[ext_resource type="Script" uid="uid://bt84ig7c4qniu" path="res://scenes/Tower.gd" id="1_kl3vk"]
 
 [node name="Tower" type="Node2D" unique_id=612723799]
-script = ExtResource("1_ay4al")
+script = ExtResource("1_kl3vk")
 
 [node name="Sprite2D" type="Sprite2D" parent="." unique_id=1370604660]
 texture = ExtResource("1_2x682")

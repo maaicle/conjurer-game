@@ -3,6 +3,7 @@ extends Node2D
 @onready var ground_layer: TileMapLayer = $GroundLayer
 
 enum ResourceType { EMPTY, ROCK, TREE, ORE }
+enum Phase { PLACEMENT, ATTACK, ACTIVATION }
 
 const TILE_ATLAS_COORDS := {
 	Vector2i(0, 0): ResourceType.EMPTY,
@@ -10,18 +11,18 @@ const TILE_ATLAS_COORDS := {
 	Vector2i(2, 0): ResourceType.TREE,
 	Vector2i(3, 0): ResourceType.ORE,
 }
-
 const TOWER_SCENE := preload("res://scenes/Tower.tscn")
 
+var current_phase: Phase = Phase.PLACEMENT
 var current_player: int = 1
 var turn_number: int = 1
 
-func end_turn() -> void:
-	print("--- End of turn ", turn_number, " (Player ", current_player, ") ---")
-	current_player = 2 if current_player == 1 else 1
-	turn_number += 1
+func _ready() -> void:
+	print("[Phase] PLACEMENT — Player ", current_player)
 
 func _unhandled_input(event: InputEvent) -> void:
+	if current_phase != Phase.PLACEMENT:
+		return
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		var mouse_pos := get_global_mouse_position()
 		var cell := ground_layer.local_to_map(mouse_pos)
@@ -42,7 +43,30 @@ func place_tower(cell: Vector2i) -> void:
 	add_child(tower)
 	print("Player ", current_player, " placed tower at ", cell, " — armor:", tower.armor, " damage:", tower.damage, " range:", tower.range_stat)
 
+	start_attack_phase()
+
+func start_attack_phase() -> void:
+	current_phase = Phase.ATTACK
+	print("[Phase] ATTACK — Player ", current_player)
+	# Batch C will fill this in with a real tower queue.
+	# Stub for now: immediately move on.
+	start_activation_phase()
+
+func start_activation_phase() -> void:
+	current_phase = Phase.ACTIVATION
+	print("[Phase] ACTIVATION — Player ", current_player)
+	for tower in get_children():
+		if tower is Tower and tower.owner_id == current_player and tower.state == Tower.TowerState.PENDING:
+			tower.state = Tower.TowerState.ACTIVE
+			print("  Tower at ", tower.grid_position, " activated")
 	end_turn()
+
+func end_turn() -> void:
+	print("[Phase] End of turn ", turn_number, " (Player ", current_player, ")")
+	current_player = 2 if current_player == 1 else 1
+	turn_number += 1
+	current_phase = Phase.PLACEMENT
+	print("[Phase] PLACEMENT — Player ", current_player)
 	
 func get_resource_at(cell: Vector2i) -> ResourceType:
 	var atlas_coords := ground_layer.get_cell_atlas_coords(cell)
