@@ -11,11 +11,15 @@ var damage: int = 1
 var range_stat: int = 1
 var state: TowerState = TowerState.PENDING
 
+func _ready() -> void:
+	$HighlightRing.visible = false
+
 func set_highlight(color: Color) -> void:
-	$Sprite2D.modulate = color
+	$HighlightRing.modulate = color
+	$HighlightRing.visible = true
 
 func clear_highlight() -> void:
-	$Sprite2D.modulate = Color.WHITE
+	$HighlightRing.visible = false
 	
 func apply_owner_color() -> void:
 	if owner_id == 1:

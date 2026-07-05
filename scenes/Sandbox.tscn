@@ -36,4 +36,36 @@ grow_horizontal = 0
 grow_vertical = 0
 text = "\"Skip\""
 
+[node name="P1Container" type="PanelContainer" parent="UI" unique_id=1416060354]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -116.0
+offset_bottom = 40.0
+grow_horizontal = 0
+
+[node name="Player1Label" type="Label" parent="UI/P1Container" unique_id=1714415984]
+layout_mode = 2
+
+[node name="P2Container" type="PanelContainer" parent="UI" unique_id=240697167]
+anchors_preset = -1
+anchor_left = 1.0
+anchor_top = 0.064
+anchor_right = 1.0
+anchor_bottom = 0.064
+offset_left = -116.0
+offset_top = -0.288002
+offset_bottom = 39.711998
+grow_horizontal = 0
+grow_vertical = 2
+
+[node name="Player2Label" type="Label" parent="UI/P2Container" unique_id=14426372]
+layout_mode = 2
+
+[node name="WinLabel" type="Label" parent="UI" unique_id=86298087]
+offset_left = 543.0
+offset_top = 293.0
+offset_right = 667.0
+offset_bottom = 316.0
+
 [connection signal="pressed" from="UI/SkipButton" to="." method="_on_skip_button_pressed"]

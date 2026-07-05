@@ -13,6 +13,7 @@ const TILE_ATLAS_COORDS := {
 }
 const TOWER_SCENE := preload("res://scenes/Tower.tscn")
 
+var player_scores := {1: 0, 2: 0}
 var current_phase: Phase = Phase.PLACEMENT
 var attack_queue: Array[Tower] = []
 var current_player: int = 1
@@ -23,6 +24,7 @@ var current_targets: Array[Tower] = []
 func _ready() -> void:
 	print("[Phase] PLACEMENT — Player ", current_player)
 	draw_grid_labels()
+	update_score_ui()
 	
 func draw_grid_labels() -> void:
 	var used_rect := ground_layer.get_used_rect()
@@ -59,7 +61,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		var mouse_pos := get_global_mouse_position()
 		var clicked_cell := ground_layer.local_to_map(mouse_pos)
 		for t in current_targets:
-			if t.grid_position == clicked_cell:
+			if is_instance_valid(t) and t.grid_position == clicked_cell:
 				resolve_attack(t)
 				return
 				
@@ -132,8 +134,12 @@ func resolve_attack(target: Tower) -> void:
 
 	if target.armor <= 0:
 		print("    Tower at ", target.grid_position, " destroyed!")
+		player_scores[current_attacker.owner_id] += 1
+		remove_child(target)
 		target.queue_free()
-
+	
+	update_score_ui()
+	check_win_condition(current_player)
 	finish_current_attacker()
 
 func skip_attack() -> void:
@@ -166,6 +172,7 @@ func end_turn() -> void:
 	turn_number += 1
 	current_phase = Phase.PLACEMENT
 	print("[Phase] PLACEMENT — Player ", current_player)
+	update_score_ui()
 	
 func get_resource_at(cell: Vector2i) -> ResourceType:
 	var atlas_coords := ground_layer.get_cell_atlas_coords(cell)
@@ -196,3 +203,22 @@ func compute_stats(counts: Dictionary) -> Dictionary:
 	
 func grid_distance(a: Vector2i, b: Vector2i) -> int:
 	return max(abs(a.x - b.x), abs(a.y - b.y))
+
+func update_score_ui() -> void:
+	$UI/P1Container/Player1Label.text = "Player 1 — Score: " + str(player_scores[1])
+	$UI/P2Container/Player2Label.text = "Player 2 — Score: " + str(player_scores[2])
+
+	if current_player == 1:
+		$UI/P1Container/Player1Label.modulate = Color.YELLOW
+		$UI/P2Container/Player2Label.modulate = Color.WHITE
+	else:
+		$UI/P2Container/Player2Label.modulate = Color.YELLOW
+		$UI/P1Container/Player1Label.modulate = Color.WHITE
+		
+func check_win_condition(player: int) -> bool:
+	if player_scores[player] >= 5:
+		$UI/WinLabel.text = "Player " + str(player) + " Wins!"
+		$UI/WinLabel.visible = true
+		get_tree().paused = true
+		return true
+	return false
