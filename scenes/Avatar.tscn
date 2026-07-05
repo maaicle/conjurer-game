@@ -1,0 +1,10 @@
+[gd_scene format=3 uid="uid://brue5wop7n3f8"]
+
+[ext_resource type="Script" uid="uid://b032xf5fjdfii" path="res://scenes/Avatar.gd" id="1_m083r"]
+[ext_resource type="Texture2D" uid="uid://cyguwrblfj7f8" path="res://assets/avatar.png" id="2_ilghb"]
+
+[node name="Avatar" type="Node2D" unique_id=2019716589]
+script = ExtResource("1_m083r")
+
+[node name="Sprite2D" type="Sprite2D" parent="." unique_id=1502324398]
+texture = ExtResource("2_ilghb")

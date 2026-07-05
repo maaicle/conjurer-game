@@ -1,31 +1,28 @@
 extends Node2D
 
 @onready var ground_layer: TileMapLayer = $GroundLayer
+@onready var camera: Camera2D = $Camera2D
 
-enum ResourceType { EMPTY, ROCK, TREE, ORE }
-enum Phase { PLACEMENT, ATTACK, ACTIVATION }
+enum ResourceType { EMPTY, ROCK, TREE, ORE, BERRIES, WATER }
 
 const TILE_ATLAS_COORDS := {
 	Vector2i(0, 0): ResourceType.EMPTY,
 	Vector2i(1, 0): ResourceType.ROCK,
 	Vector2i(2, 0): ResourceType.TREE,
 	Vector2i(3, 0): ResourceType.ORE,
+	Vector2i(4, 0): ResourceType.BERRIES,
+	Vector2i(5, 0): ResourceType.WATER,
 }
-const TOWER_SCENE := preload("res://scenes/Tower.tscn")
 
-var player_scores := {1: 0, 2: 0}
-var current_phase: Phase = Phase.PLACEMENT
-var attack_queue: Array[Tower] = []
-var current_player: int = 1
-var turn_number: int = 1
-var current_attacker: Tower = null
-var current_targets: Array[Tower] = []
+const BASE_SCENE := preload("res://scenes/Base.tscn")
+const AVATAR_SCENE := preload("res://scenes/Avatar.tscn")
+
+var base_placed := false
 
 func _ready() -> void:
-	print("[Phase] PLACEMENT — Player ", current_player)
 	draw_grid_labels()
-	update_score_ui()
-	
+	fit_camera_to_map()
+
 func draw_grid_labels() -> void:
 	var used_rect := ground_layer.get_used_rect()
 	var tile_size := ground_layer.tile_set.tile_size
@@ -48,177 +45,73 @@ func draw_grid_labels() -> void:
 		label.position = world_pos - Vector2(14, tile_size.y / 2.0)
 		add_child(label)
 
-func _unhandled_input(event: InputEvent) -> void:
-	if not (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT):
-		return
-		
-	if current_phase == Phase.PLACEMENT:
-		var mouse_pos := get_global_mouse_position()
-		var cell := ground_layer.local_to_map(mouse_pos)
-		if is_valid_ground(cell):
-			place_tower(cell)
-	elif current_phase == Phase.ATTACK and current_attacker != null:
-		var mouse_pos := get_global_mouse_position()
-		var clicked_cell := ground_layer.local_to_map(mouse_pos)
-		for t in current_targets:
-			if is_instance_valid(t) and t.grid_position == clicked_cell:
-				resolve_attack(t)
-				return
-				
+func fit_camera_to_map() -> void:
+	var used_rect := ground_layer.get_used_rect()
+	var tile_size := ground_layer.tile_set.tile_size
+	var map_pixel_size := Vector2(used_rect.size.x * tile_size.x, used_rect.size.y * tile_size.y)
+	var viewport_size := get_viewport_rect().size
+
+	var zoom_x := viewport_size.x / map_pixel_size.x
+	var zoom_y := viewport_size.y / map_pixel_size.y
+	var zoom: float = min(zoom_x, zoom_y) * 0.9  # 0.9 leaves a small margin so edges aren't flush against the window
+
+	camera.zoom = Vector2(zoom, zoom)
+	@warning_ignore("integer_division")
+	camera.position = ground_layer.map_to_local(used_rect.position + used_rect.size / 2)
+
 func is_valid_ground(cell: Vector2i) -> bool:
 	return ground_layer.get_cell_source_id(cell) != -1
 
-func place_tower(cell: Vector2i) -> void:
-	var tower := TOWER_SCENE.instantiate()
-	tower.position = ground_layer.map_to_local(cell)
-	tower.grid_position = cell
-	tower.owner_id = current_player
-	tower.owner_id = current_player
-	tower.apply_owner_color()
-
-	var counts := scan_proximity(cell, 1)
-	var stats := compute_stats(counts)
-	tower.armor = stats["armor"]
-	tower.damage = stats["damage"]
-	tower.range_stat = stats["range"]
-
-	add_child(tower)
-	print("Player ", current_player, " placed tower at ", cell, " — armor:", tower.armor, " damage:", tower.damage, " range:", tower.range_stat)
-
-	start_attack_phase()
-
-func start_attack_phase() -> void:
-	current_phase = Phase.ATTACK
-	print("[Phase] ATTACK — Player ", current_player)
-
-	attack_queue.clear()
-	for tower in get_children():
-		if tower is Tower and tower.owner_id == current_player and tower.state == Tower.TowerState.ACTIVE:
-			attack_queue.append(tower)
-
-	print("  Attack queue: ", attack_queue.size(), " tower(s)")
-	process_next_attacker()
-	
-func process_next_attacker() -> void:
-	if attack_queue.is_empty():
-		print("  Attack phase complete")
-		current_attacker = null
-		current_targets = []
-		start_activation_phase()
-		return
-
-	current_attacker = attack_queue.pop_front()
-	current_targets = find_targets_in_range(current_attacker)
-
-	current_attacker.set_highlight(Color.YELLOW)
-	for t in current_targets:
-		t.set_highlight(Color.RED)
-
-	print("  Tower at ", current_attacker.grid_position, " is up — ", current_targets.size(), " target(s) in range")
-	print("  Click a highlighted target, or press Skip/Rest.")
-	# Execution pauses here — waiting for input. No more self-call.
-	
-func find_targets_in_range(attacker: Tower) -> Array[Tower]:
-	var targets: Array[Tower] = []
-	for tower in get_children():
-		if tower is Tower and tower.owner_id != attacker.owner_id and tower.state == Tower.TowerState.ACTIVE:
-			var distance := grid_distance(attacker.grid_position, tower.grid_position)
-			if distance <= attacker.range_stat:
-				targets.append(tower)
-	return targets
-	
-func resolve_attack(target: Tower) -> void:
-	print("  Tower at ", current_attacker.grid_position, " attacks tower at ", target.grid_position, " for ", current_attacker.damage, " damage")
-	target.armor -= current_attacker.damage
-	print("    Target armor now: ", target.armor)
-
-	if target.armor <= 0:
-		print("    Tower at ", target.grid_position, " destroyed!")
-		player_scores[current_attacker.owner_id] += 1
-		remove_child(target)
-		target.queue_free()
-	
-	update_score_ui()
-	check_win_condition(current_player)
-	finish_current_attacker()
-
-func skip_attack() -> void:
-	print("  Tower at ", current_attacker.grid_position, " skips/rests")
-	finish_current_attacker()
-
-func finish_current_attacker() -> void:
-	current_attacker.clear_highlight()
-	for t in current_targets:
-		if is_instance_valid(t):
-			t.clear_highlight()
-	process_next_attacker()
-	
-func _on_skip_button_pressed() -> void:
-	if current_phase == Phase.ATTACK and current_attacker != null:
-		skip_attack()
-
-func start_activation_phase() -> void:
-	current_phase = Phase.ACTIVATION
-	print("[Phase] ACTIVATION — Player ", current_player)
-	for tower in get_children():
-		if tower is Tower and tower.owner_id == current_player and tower.state == Tower.TowerState.PENDING:
-			tower.state = Tower.TowerState.ACTIVE
-			print("  Tower at ", tower.grid_position, " activated")
-	end_turn()
-
-func end_turn() -> void:
-	print("[Phase] End of turn ", turn_number, " (Player ", current_player, ")")
-	current_player = 2 if current_player == 1 else 1
-	turn_number += 1
-	current_phase = Phase.PLACEMENT
-	print("[Phase] PLACEMENT — Player ", current_player)
-	update_score_ui()
-	
 func get_resource_at(cell: Vector2i) -> ResourceType:
 	var atlas_coords := ground_layer.get_cell_atlas_coords(cell)
 	if atlas_coords in TILE_ATLAS_COORDS:
 		return TILE_ATLAS_COORDS[atlas_coords]
 	return ResourceType.EMPTY
-	
-func scan_proximity(center: Vector2i, radius: int) -> Dictionary:
-	var counts := {
-		ResourceType.ROCK: 0,
-		ResourceType.TREE: 0,
-		ResourceType.ORE: 0,
-	}
-	for x in range(-radius, radius + 1):
-		for y in range(-radius, radius + 1):
-			var cell := center + Vector2i(x, y)
-			var resource := get_resource_at(cell)
-			if resource != ResourceType.EMPTY:
-				counts[resource] += 1
-	return counts
-	
-func compute_stats(counts: Dictionary) -> Dictionary:
-	return {
-		"armor": 1 + counts[ResourceType.ROCK],
-		"damage": 1 + counts[ResourceType.ORE],
-		"range": 1 + counts[ResourceType.TREE],
-	}
-	
+
 func grid_distance(a: Vector2i, b: Vector2i) -> int:
 	return max(abs(a.x - b.x), abs(a.y - b.y))
+	
+func is_passable(cell: Vector2i) -> bool:
+	var data := ground_layer.get_cell_tile_data(cell)
+	if data == null:
+		return false
+	return data.get_custom_data("passable")
 
-func update_score_ui() -> void:
-	$UI/P1Container/Player1Label.text = "Player 1 — Score: " + str(player_scores[1])
-	$UI/P2Container/Player2Label.text = "Player 2 — Score: " + str(player_scores[2])
+func _unhandled_input(event: InputEvent) -> void:
+	if base_placed:
+		return
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		var mouse_pos := get_global_mouse_position()
+		var cell := ground_layer.local_to_map(mouse_pos)
+		try_place_base(cell)
 
-	if current_player == 1:
-		$UI/P1Container/Player1Label.modulate = Color.YELLOW
-		$UI/P2Container/Player2Label.modulate = Color.WHITE
-	else:
-		$UI/P2Container/Player2Label.modulate = Color.YELLOW
-		$UI/P1Container/Player1Label.modulate = Color.WHITE
-		
-func check_win_condition(player: int) -> bool:
-	if player_scores[player] >= 5:
-		$UI/WinLabel.text = "Player " + str(player) + " Wins!"
-		$UI/WinLabel.visible = true
-		get_tree().paused = true
-		return true
-	return false
+func try_place_base(cell: Vector2i) -> void:
+	if not is_passable(cell):
+		print("Cannot place base — tile is not passable or doesn't exist.")
+		return
+
+	var avatar_cell := find_valid_avatar_tile(cell)
+	if avatar_cell == Vector2i(-1, -1):
+		print("Cannot place base here — no valid adjacent tile for the avatar.")
+		return
+
+	var base := BASE_SCENE.instantiate()
+	base.position = ground_layer.map_to_local(cell)
+	base.grid_position = cell
+	add_child(base)
+
+	var avatar := AVATAR_SCENE.instantiate()
+	avatar.position = ground_layer.map_to_local(avatar_cell)
+	avatar.grid_position = avatar_cell
+	add_child(avatar)
+
+	base_placed = true
+	print("Base placed at ", cell, ", avatar placed at ", avatar_cell)
+
+func find_valid_avatar_tile(base_cell: Vector2i) -> Vector2i:
+	var directions: Array[Vector2i] = [Vector2i(0, -1), Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0)]
+	for dir in directions:
+		var candidate := base_cell + dir
+		if is_passable(candidate):
+			return candidate
+	return Vector2i(-1, -1)
