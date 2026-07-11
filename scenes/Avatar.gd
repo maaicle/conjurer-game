@@ -1,4 +1,8 @@
-extends Node2D
+extends Unit
 class_name Avatar
 
-var grid_position: Vector2i
+func _ready() -> void:
+	movement_range = 2
+
+func get_available_actions() -> Array[String]:
+	return ["Spawn Soldier"]
