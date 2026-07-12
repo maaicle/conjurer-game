@@ -37,6 +37,10 @@ var in_consume_mode := false
 var consume_valid_cells: Array[Vector2i] = []
 var consume_highlight_nodes: Array[Sprite2D] = []
 var pending_soldier: Soldier = null
+var current_base: Base = null
+var in_avatar_placement_mode := false
+var avatar_valid_cells: Array[Vector2i] = []
+var avatar_highlight_nodes: Array[Sprite2D] = []
 
 #Scene setup ----------------------------------------------------
 
@@ -111,6 +115,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			exit_spawn_mode()
 		elif in_move_mode:
 			exit_move_mode()
+		elif in_avatar_placement_mode:
+			cancel_base_placement()
 		return
 
 	if event.button_index != MOUSE_BUTTON_LEFT:
@@ -118,6 +124,11 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	var mouse_pos := get_global_mouse_position()
 	var cell := ground_layer.local_to_map(mouse_pos)
+	
+	if in_avatar_placement_mode:
+		if cell in avatar_valid_cells:
+			place_avatar(cell)
+		return
 
 	if not base_placed:
 		try_place_base(cell)
@@ -145,31 +156,33 @@ func _unhandled_input(event: InputEvent) -> void:
 #Base placement -----------------------------------------------------
 
 func try_place_base(cell: Vector2i) -> void:
-	
 	if not is_passable(cell):
 		print("Cannot place base — tile is not passable or doesn't exist.")
 		return
 
-	var avatar_cell := find_valid_avatar_tile(cell)
-	if avatar_cell == Vector2i(-1, -1):
-		print("Cannot place base here — no valid adjacent tile for the avatar.")
-		return
-
-	var base := BASE_SCENE.instantiate()
+	var base: Base = BASE_SCENE.instantiate()
 	base.position = ground_layer.map_to_local(cell)
 	base.grid_position = cell
-	base_position = cell
-	
 	add_child(base)
+	current_base = base
+	base_position = cell
 
-	var avatar := AVATAR_SCENE.instantiate()
-	avatar.position = ground_layer.map_to_local(avatar_cell)
-	avatar.grid_position = avatar_cell
-	add_child(avatar)
+	avatar_valid_cells = compute_avatar_area(cell)
+	if avatar_valid_cells.is_empty():
+		print("Cannot place base here — no valid tile for the avatar.")
+		remove_child(base)
+		base.queue_free()
+		current_base = null
+		return
 
-	base_placed = true
-	print("Base placed at ", cell, ", avatar placed at ", avatar_cell)
-	begin_turn_planning()
+	enter_avatar_placement_mode()
+
+func compute_avatar_area(base_cell: Vector2i) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	for cell in compute_flood_area(base_cell, 1):
+		if is_passable(cell):
+			cells.append(cell)
+	return cells
 
 func find_valid_avatar_tile(base_cell: Vector2i) -> Vector2i:
 	var directions: Array[Vector2i] = [Vector2i(0, -1), Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0)]
@@ -178,6 +191,37 @@ func find_valid_avatar_tile(base_cell: Vector2i) -> Vector2i:
 		if is_passable(candidate):
 			return candidate
 	return Vector2i(-1, -1)
+
+func enter_avatar_placement_mode() -> void:
+	in_avatar_placement_mode = true
+	for cell in avatar_valid_cells:
+		avatar_highlight_nodes.append(create_highlight(cell, Color(0.6, 0.4, 1.0)))
+	update_toolbar()
+
+func exit_avatar_placement_mode() -> void:
+	in_avatar_placement_mode = false
+	avatar_valid_cells = []
+	for node in avatar_highlight_nodes:
+		node.queue_free()
+	avatar_highlight_nodes = []
+	update_toolbar()
+
+func cancel_base_placement() -> void:
+	exit_avatar_placement_mode()
+	remove_child(current_base)
+	current_base.queue_free()
+	current_base = null
+
+func place_avatar(cell: Vector2i) -> void:
+	var avatar: Avatar = AVATAR_SCENE.instantiate()
+	avatar.position = ground_layer.map_to_local(cell)
+	avatar.grid_position = cell
+	add_child(avatar)
+
+	exit_avatar_placement_mode()
+	base_placed = true
+	print("Base placed at ", base_position, ", avatar placed at ", cell)
+	begin_turn_planning()
 	
 #Unit Selection Tracking -------------------------------------------
 
@@ -188,10 +232,12 @@ func begin_turn_planning() -> void:
 func auto_select_unit() -> void:
 	for unit in get_children():
 		if unit is Unit and unit.turn_state == Unit.TurnState.READY:
-			selected_unit = unit
-			print("  Auto-selected unit at ", unit.grid_position)
+			select_unit(unit)
 			return
-	print("  No units available to select.")
+	if selected_unit != null and is_instance_valid(selected_unit):
+		selected_unit.set_selected(false)
+	selected_unit = null
+	print("  No units available to auto-select.")
 	update_toolbar()
 
 func get_unit_at(cell: Vector2i) -> Unit:
@@ -201,7 +247,10 @@ func get_unit_at(cell: Vector2i) -> Unit:
 	return null
 
 func select_unit(unit: Unit) -> void:
+	if selected_unit != null and is_instance_valid(selected_unit):
+		selected_unit.set_selected(false)
 	selected_unit = unit
+	selected_unit.set_selected(true)
 	print("Selected unit at ", unit.grid_position)
 	update_toolbar()
 
@@ -210,6 +259,7 @@ func update_toolbar() -> void:
 	var move_btn: Button = $UI/Toolbar/HBox/MoveButton
 	var skip_btn: Button = $UI/Toolbar/HBox/SkipButton
 	var end_turn_btn: Button = $UI/Toolbar/HBox/EndTurnButton
+	var next_unit_btn: Button = $UI/Toolbar/HBox/NextUnitButton
 
 	if selected_unit == null:
 		move_btn.disabled = true
@@ -223,6 +273,7 @@ func update_toolbar() -> void:
 		move_btn.disabled = true
 		skip_btn.disabled = true
 		end_turn_btn.disabled = true
+		next_unit_btn.disabled = true
 		for child in $UI/Toolbar/HBox/ActionButtons.get_children():
 			if child is Button:
 				child.disabled = true
@@ -231,6 +282,8 @@ func update_toolbar() -> void:
 	move_btn.disabled = not selected_unit.can_move()
 	skip_btn.disabled = selected_unit.turn_state != Unit.TurnState.READY
 	end_turn_btn.disabled = not all_units_finished()
+	next_unit_btn.disabled = all_units_finished()
+
 
 	clear_action_buttons()
 	for action_name in selected_unit.get_available_actions():
@@ -263,6 +316,9 @@ func _on_action_button_pressed(action_name: String) -> void:
 func _on_end_turn_button_pressed() -> void:
 	end_turn()
 	update_toolbar()
+
+func _on_next_unit_button_pressed() -> void:
+	select_next_unit()
 
 
 #Unit movement---------------------------------------------------
@@ -378,6 +434,7 @@ func compute_resource_area(center: Vector2i, range_points: int) -> Array[Vector2
 			cells.append(cell)
 	return cells
 
+#Consume Mode----------------------------------------------------------------
 func enter_consume_mode() -> void:
 	in_consume_mode = true
 	consume_valid_cells = compute_resource_area(pending_soldier.grid_position, pending_soldier.collection_range)
@@ -421,6 +478,7 @@ func apply_resource_bonus(soldier: Soldier, resource: ResourceType) -> void:
 		ResourceType.WATER:
 			soldier.armor_regen += 1
 
+#Spawn Mode---------------------------------------------------------------------
 func enter_spawn_mode() -> void:
 	if selected_unit == null or not selected_unit.can_act():
 		return
@@ -458,3 +516,22 @@ func create_highlight(cell: Vector2i, color: Color) -> Sprite2D:
 	highlight.position = ground_layer.map_to_local(cell)
 	add_child(highlight)
 	return highlight
+
+#Next Unit----------------------------------------------------------------------
+func select_next_unit() -> void:
+	var units: Array[Unit] = []
+	for child in get_children():
+		if child is Unit:
+			units.append(child)
+	if units.is_empty():
+		return
+
+	var start_index := units.find(selected_unit)
+	if start_index == -1:
+		start_index = 0
+
+	for i in range(1, units.size() + 1):
+		var idx := (start_index + i) % units.size()
+		if units[idx].turn_state == Unit.TurnState.READY:
+			select_unit(units[idx])
+			return
