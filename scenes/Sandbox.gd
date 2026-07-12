@@ -47,6 +47,7 @@ var avatar_highlight_nodes: Array[Sprite2D] = []
 func _ready() -> void:
 	draw_grid_labels()
 	fit_camera_to_map()
+	update_toolbar()
 
 func draw_grid_labels() -> void:
 	var used_rect := ground_layer.get_used_rect()
@@ -105,6 +106,11 @@ func is_passable(cell: Vector2i) -> bool:
 	return data.get_custom_data("passable")
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_SPACE:
+		if not (in_spawn_mode or in_consume_mode or in_avatar_placement_mode):
+			_on_skip_button_pressed()
+		return
+
 	if not (event is InputEventMouseButton and event.pressed):
 		return
 
@@ -113,8 +119,6 @@ func _unhandled_input(event: InputEvent) -> void:
 			exit_consume_mode(true)
 		elif in_spawn_mode:
 			exit_spawn_mode()
-		elif in_move_mode:
-			exit_move_mode()
 		elif in_avatar_placement_mode:
 			cancel_base_placement()
 		return
@@ -124,7 +128,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	var mouse_pos := get_global_mouse_position()
 	var cell := ground_layer.local_to_map(mouse_pos)
-	
+
 	if in_avatar_placement_mode:
 		if cell in avatar_valid_cells:
 			place_avatar(cell)
@@ -144,14 +148,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			place_soldier(cell)
 		return
 
-	if in_move_mode:
-		if cell in reachable_cells:
-			perform_move(cell)
+	if in_move_mode and cell in reachable_cells:
+		perform_move(cell)
 		return
 
-	var clicked_unit := get_unit_at(cell)
-	if clicked_unit != null:
-		select_unit(clicked_unit)
+	try_select_unit_at(cell)
 
 #Base placement -----------------------------------------------------
 
@@ -249,28 +250,37 @@ func get_unit_at(cell: Vector2i) -> Unit:
 func select_unit(unit: Unit) -> void:
 	if selected_unit != null and is_instance_valid(selected_unit):
 		selected_unit.set_selected(false)
+	if in_move_mode:
+		exit_move_mode()
 	selected_unit = unit
 	selected_unit.set_selected(true)
 	print("Selected unit at ", unit.grid_position)
+	enter_move_mode()
 	update_toolbar()
+
+func try_select_unit_at(cell: Vector2i) -> bool:
+	var clicked_unit := get_unit_at(cell)
+	if clicked_unit != null:
+		select_unit(clicked_unit)
+		return true
+	return false
 
 #Toolbar Update------------------------------------------------------
 func update_toolbar() -> void:
-	var move_btn: Button = $UI/Toolbar/HBox/MoveButton
+
 	var skip_btn: Button = $UI/Toolbar/HBox/SkipButton
 	var end_turn_btn: Button = $UI/Toolbar/HBox/EndTurnButton
 	var next_unit_btn: Button = $UI/Toolbar/HBox/NextUnitButton
 
 	if selected_unit == null:
-		move_btn.disabled = true
 		skip_btn.disabled = true
 		end_turn_btn.disabled = true
+		next_unit_btn.disabled = true
 		clear_action_buttons()
 		return
 		
-	var mode_active := in_move_mode or in_spawn_mode or in_consume_mode
+	var mode_active := in_spawn_mode or in_consume_mode or in_avatar_placement_mode
 	if mode_active:
-		move_btn.disabled = true
 		skip_btn.disabled = true
 		end_turn_btn.disabled = true
 		next_unit_btn.disabled = true
@@ -278,8 +288,7 @@ func update_toolbar() -> void:
 			if child is Button:
 				child.disabled = true
 		return
-	
-	move_btn.disabled = not selected_unit.can_move()
+
 	skip_btn.disabled = selected_unit.turn_state != Unit.TurnState.READY
 	end_turn_btn.disabled = not all_units_finished()
 	next_unit_btn.disabled = all_units_finished()
@@ -299,14 +308,12 @@ func clear_action_buttons() -> void:
 		
 #Button functions-----------------------------------------------
 
-func _on_move_button_pressed() -> void:
-	enter_move_mode()
-
 func _on_skip_button_pressed() -> void:
 	if selected_unit == null:
 		return
 	selected_unit.skip()
 	print("Unit at ", selected_unit.grid_position, " is now waiting")
+	exit_move_mode()
 	update_toolbar()
 
 func _on_action_button_pressed(action_name: String) -> void:
@@ -340,19 +347,24 @@ func compute_reachable_tiles(start: Vector2i, points: int) -> Array[Vector2i]:
 				continue
 			if not is_passable(neighbor):
 				continue
-			if neighbor == base_position:
-				continue
-			if get_unit_at(neighbor) != null:
-				continue
 			visited[neighbor] = current_cost + 1
 			frontier.append(neighbor)
-			reachable.append(neighbor)
+			if neighbor != base_position and get_unit_at(neighbor) == null:
+				reachable.append(neighbor)
 
 	return reachable
 
 func enter_move_mode() -> void:
+	in_move_mode = false
+	reachable_cells = []
+	for node in move_highlight_nodes:
+		node.queue_free()
+	move_highlight_nodes = []
+
 	if selected_unit == null or not selected_unit.can_move():
+		update_toolbar()
 		return
+
 	in_move_mode = true
 	reachable_cells = compute_reachable_tiles(selected_unit.grid_position, selected_unit.movement_range)
 	for cell in reachable_cells:
@@ -429,6 +441,8 @@ func compute_spawn_area(center: Vector2i, range_points: int) -> Array[Vector2i]:
 
 func compute_resource_area(center: Vector2i, range_points: int) -> Array[Vector2i]:
 	var cells: Array[Vector2i] = []
+	if get_resource_at(center) != ResourceType.EMPTY:
+		cells.append(center)
 	for cell in compute_flood_area(center, range_points):
 		if get_resource_at(cell) != ResourceType.EMPTY:
 			cells.append(cell)
@@ -453,6 +467,8 @@ func exit_consume_mode(cancelled: bool) -> void:
 		pending_soldier.queue_free()
 		pending_soldier = null
 		enter_spawn_mode()
+	else:
+		enter_move_mode()
 	update_toolbar()
 
 func consume_resource(cell: Vector2i) -> void:
@@ -461,8 +477,8 @@ func consume_resource(cell: Vector2i) -> void:
 	ground_layer.set_cell(cell, 0, Vector2i(0, 0))
 	print("Soldier gained bonus from ", ResourceType.keys()[resource])
 	pending_soldier = null
-	exit_consume_mode(false)
 	selected_unit.use_action()
+	exit_consume_mode(false)
 	update_toolbar()
 
 func apply_resource_bonus(soldier: Soldier, resource: ResourceType) -> void:
@@ -480,6 +496,7 @@ func apply_resource_bonus(soldier: Soldier, resource: ResourceType) -> void:
 
 #Spawn Mode---------------------------------------------------------------------
 func enter_spawn_mode() -> void:
+	exit_move_mode()
 	if selected_unit == null or not selected_unit.can_act():
 		return
 	in_spawn_mode = true
@@ -498,15 +515,19 @@ func place_soldier(cell: Vector2i) -> void:
 	add_child(soldier)
 	pending_soldier = soldier
 
-	exit_spawn_mode()
+	clear_spawn_highlights()
 	enter_consume_mode()
 
-func exit_spawn_mode() -> void:
+func clear_spawn_highlights() -> void:
 	in_spawn_mode = false
 	spawn_valid_cells = []
 	for node in spawn_highlight_nodes:
 		node.queue_free()
 	spawn_highlight_nodes = []
+
+func exit_spawn_mode() -> void:
+	clear_spawn_highlights()
+	enter_move_mode()
 	update_toolbar()
 
 func create_highlight(cell: Vector2i, color: Color) -> Sprite2D:
