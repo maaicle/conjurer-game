@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://bcerjjda47top"]
 
 [ext_resource type="Texture2D" uid="uid://bbcc0kfv4y18d" path="res://assets/tower.png" id="1_2x682"]
-[ext_resource type="Script" uid="uid://bt84ig7c4qniu" path="res://scenes/Tower.gd" id="1_kl3vk"]
+[ext_resource type="Script" uid="uid://bt84ig7c4qniu" path="res://scripts/Tower.gd" id="1_kl3vk"]
 [ext_resource type="Texture2D" uid="uid://dwsgtbrelsvob" path="res://assets/highlight_ring.png" id="2_02lgm"]
 
 [node name="Tower" type="Node2D" unique_id=612723799]

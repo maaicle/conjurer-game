@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://cnyuhpg5risso"]
 
-[ext_resource type="Script" uid="uid://brat3bj1chgws" path="res://scenes/Base.gd" id="1_bd46k"]
+[ext_resource type="Script" uid="uid://brat3bj1chgws" path="res://scripts/Base.gd" id="1_bd46k"]
 [ext_resource type="Texture2D" uid="uid://bbcc0kfv4y18d" path="res://assets/tower.png" id="2_j2xnf"]
 
 [node name="Base" type="Node2D" unique_id=2108353449]
