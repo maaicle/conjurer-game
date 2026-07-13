@@ -35,7 +35,7 @@ func is_passable(cell: Vector2i) -> bool:
 		return false
 	return data.get_custom_data("passable")
 
-func compute_flood_area(start: Vector2i, points: int) -> Array[Vector2i]:
+func compute_flood_area(start: Vector2i, points: int, can_traverse: Callable = Callable()) -> Array[Vector2i]:
 	var visited := {start: 0}
 	var frontier: Array[Vector2i] = [start]
 	var directions: Array[Vector2i] = [Vector2i(0, -1), Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0)]
@@ -49,6 +49,8 @@ func compute_flood_area(start: Vector2i, points: int) -> Array[Vector2i]:
 		for dir in directions:
 			var neighbor := current + dir
 			if visited.has(neighbor):
+				continue
+			if can_traverse.is_valid() and not can_traverse.call(neighbor):
 				continue
 			visited[neighbor] = current_cost + 1
 			frontier.append(neighbor)

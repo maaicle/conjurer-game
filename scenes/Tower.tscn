@@ -1,11 +1,41 @@
-[gd_scene format=3 uid="uid://bcerjjda47top"]
+[gd_scene format=3 uid="uid://b8ys4n0uautj3"]
 
 [ext_resource type="Texture2D" uid="uid://bbcc0kfv4y18d" path="res://assets/tower.png" id="1_2x682"]
-[ext_resource type="Script" uid="uid://bt84ig7c4qniu" path="res://scripts/Tower.gd" id="1_kl3vk"]
 [ext_resource type="Texture2D" uid="uid://dwsgtbrelsvob" path="res://assets/highlight_ring.png" id="2_02lgm"]
 
+[sub_resource type="GDScript" id="GDScript_kl3vk"]
+script/source = "extends Node2D
+class_name Tower
+
+
+enum TowerState { PENDING, ACTIVE }
+
+var grid_position: Vector2i
+var owner_id: int = 1
+var armor: int = 1
+var damage: int = 1
+var range_stat: int = 1
+var state: TowerState = TowerState.PENDING
+
+func _ready() -> void:
+	$HighlightRing.visible = false
+
+func set_highlight(color: Color) -> void:
+	$HighlightRing.modulate = color
+	$HighlightRing.visible = true
+
+func clear_highlight() -> void:
+	$HighlightRing.visible = false
+	
+func apply_owner_color() -> void:
+	if owner_id == 1:
+		$Sprite2D.self_modulate = Color(0.4, 0.6, 1.0)  # blue-ish
+	else:
+		$Sprite2D.self_modulate = Color(1.0, 0.5, 0.4)  # orange-ish
+"
+
 [node name="Tower" type="Node2D" unique_id=612723799]
-script = ExtResource("1_kl3vk")
+script = SubResource("GDScript_kl3vk")
 
 [node name="HighlightRing" type="Sprite2D" parent="." unique_id=1780801911]
 texture = ExtResource("2_02lgm")

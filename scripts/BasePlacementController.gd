@@ -40,8 +40,7 @@ func try_place_base(cell: Vector2i) -> void:
 	avatar_valid_cells = compute_avatar_area(cell)
 	if avatar_valid_cells.is_empty():
 		print("Cannot place base here — no valid tile for the avatar.")
-		parent_node.remove_child(base)
-		base.queue_free()
+		NodeUtils.free_node(parent_node, base)
 		current_base = null
 		return
 
@@ -63,15 +62,13 @@ func enter_avatar_placement_mode() -> void:
 func exit_avatar_placement_mode() -> void:
 	in_avatar_placement_mode = false
 	avatar_valid_cells = []
-	for node in avatar_highlight_nodes:
-		node.queue_free()
+	highlighter.clear(avatar_highlight_nodes)
 	avatar_highlight_nodes = []
 	on_state_changed.call()
 
 func cancel_base_placement() -> void:
 	exit_avatar_placement_mode()
-	parent_node.remove_child(current_base)
-	current_base.queue_free()
+	NodeUtils.free_node(parent_node, current_base)
 	current_base = null
 
 func place_avatar(cell: Vector2i) -> void:

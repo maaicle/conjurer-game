@@ -21,7 +21,7 @@ func _ready() -> void:
 	turn_manager = TurnManager.new(self, _on_unit_selection_changed)
 	grid_highlighter = GridHighlighter.new(ground_layer, self)
 	base_placement = BasePlacementController.new(tile_grid, grid_highlighter, self, _on_avatar_placed, update_toolbar)
-	movement = MovementController.new(tile_grid, turn_manager, base_placement, self, update_toolbar)
+	movement = MovementController.new(tile_grid, turn_manager, base_placement,grid_highlighter, self, update_toolbar)
 	spawn_controller = SpawnController.new(tile_grid, turn_manager, base_placement, grid_highlighter, self, update_toolbar, movement.exit_move_mode, movement.enter_move_mode)
 	draw_grid_labels()
 	fit_camera_to_map()

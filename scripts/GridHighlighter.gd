@@ -17,3 +17,8 @@ func create_highlight(cell: Vector2i, color: Color) -> Sprite2D:
 	highlight.position = ground_layer.map_to_local(cell)
 	parent_node.add_child(highlight)
 	return highlight
+
+func clear(nodes: Array[Sprite2D]) -> void:
+	for node in nodes:
+		node.queue_free()
+	nodes.clear()

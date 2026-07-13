@@ -3,6 +3,15 @@ class_name SpawnController
 
 const SOLDIER_SCENE := preload("res://scenes/Soldier.tscn")
 
+const RESOURCE_BONUSES := {
+	TileGrid.ResourceType.ROCK: {"stat": "armor", "amount": 1},
+	TileGrid.ResourceType.TREE: {"stat": "attack_range", "amount": 1},
+	TileGrid.ResourceType.ORE: {"stat": "damage", "amount": 1},
+	TileGrid.ResourceType.BERRIES: {"stat": "movement_range", "amount": 1},
+	TileGrid.ResourceType.WATER: {"stat": "armor_regen", "amount": 1},
+}
+
+
 var tile_grid: TileGrid
 var turn_manager: TurnManager
 var base_placement: BasePlacementController
@@ -79,8 +88,7 @@ func place_soldier(cell: Vector2i) -> void:
 func clear_spawn_highlights() -> void:
 	in_spawn_mode = false
 	spawn_valid_cells = []
-	for node in spawn_highlight_nodes:
-		node.queue_free()
+	highlighter.clear(spawn_highlight_nodes)
 	spawn_highlight_nodes = []
 
 func exit_spawn_mode() -> void:
@@ -98,12 +106,10 @@ func enter_consume_mode() -> void:
 func exit_consume_mode(cancelled: bool) -> void:
 	in_consume_mode = false
 	consume_valid_cells = []
-	for node in consume_highlight_nodes:
-		node.queue_free()
+	highlighter.clear(consume_highlight_nodes)
 	consume_highlight_nodes = []
 	if cancelled:
-		parent_node.remove_child(pending_soldier)
-		pending_soldier.queue_free()
+		NodeUtils.free_node(parent_node, pending_soldier)
 		pending_soldier = null
 		enter_spawn_mode()
 	else:
@@ -120,14 +126,9 @@ func consume_resource(cell: Vector2i) -> void:
 	exit_consume_mode(false)
 
 func apply_resource_bonus(soldier: Soldier, resource: TileGrid.ResourceType) -> void:
-	match resource:
-		TileGrid.ResourceType.ROCK:
-			soldier.armor += 1
-		TileGrid.ResourceType.TREE:
-			soldier.range_stat += 1
-		TileGrid.ResourceType.ORE:
-			soldier.damage += 1
-		TileGrid.ResourceType.BERRIES:
-			soldier.movement_range += 1
-		TileGrid.ResourceType.WATER:
-			soldier.armor_regen += 1
+	if not RESOURCE_BONUSES.has(resource):
+		return
+	var bonus: Dictionary = RESOURCE_BONUSES[resource]
+	var stat_name: String = bonus["stat"]
+	var amount: int = bonus["amount"]
+	soldier.set(stat_name, soldier.get(stat_name) + amount)
