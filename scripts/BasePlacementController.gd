@@ -1,14 +1,15 @@
 extends RefCounted
 class_name BasePlacementController
 
+signal avatar_placed
+signal state_changed
+
 const BASE_SCENE := preload("res://scenes/Base.tscn")
 const AVATAR_SCENE := preload("res://scenes/Avatar.tscn")
 
 var tile_grid: TileGrid
 var highlighter: GridHighlighter
 var parent_node: Node
-var on_avatar_placed: Callable
-var on_state_changed: Callable
 
 var base_placed := false
 var base_position: Vector2i
@@ -18,12 +19,10 @@ var in_avatar_placement_mode := false
 var avatar_valid_cells: Array[Vector2i] = []
 var avatar_highlight_nodes: Array[Sprite2D] = []
 
-func _init(grid: TileGrid, grid_highlighter: GridHighlighter, root: Node, avatar_placed_callback: Callable, state_changed_callback: Callable) -> void:
+func _init(grid: TileGrid, grid_highlighter: GridHighlighter, root: Node) -> void:
 	tile_grid = grid
 	highlighter = grid_highlighter
 	parent_node = root
-	on_avatar_placed = avatar_placed_callback
-	on_state_changed = state_changed_callback
 
 func try_place_base(cell: Vector2i) -> void:
 	if not tile_grid.is_passable(cell):
@@ -57,14 +56,14 @@ func enter_avatar_placement_mode() -> void:
 	in_avatar_placement_mode = true
 	for cell in avatar_valid_cells:
 		avatar_highlight_nodes.append(highlighter.create_highlight(cell, Color(0.6, 0.4, 1.0)))
-	on_state_changed.call()
+	state_changed.emit()
 
 func exit_avatar_placement_mode() -> void:
 	in_avatar_placement_mode = false
 	avatar_valid_cells = []
 	highlighter.clear(avatar_highlight_nodes)
 	avatar_highlight_nodes = []
-	on_state_changed.call()
+	state_changed.emit()
 
 func cancel_base_placement() -> void:
 	exit_avatar_placement_mode()
@@ -80,4 +79,4 @@ func place_avatar(cell: Vector2i) -> void:
 	exit_avatar_placement_mode()
 	base_placed = true
 	print("Base placed at ", base_position, ", avatar placed at ", cell)
-	on_avatar_placed.call()
+	avatar_placed.emit()

@@ -1,15 +1,14 @@
 extends RefCounted
 class_name ToolbarUI
 
-var on_action_pressed: Callable
+signal action_pressed(action_name: String)
 
 var skip_btn: Button
 var end_turn_btn: Button
 var next_unit_btn: Button
 var action_buttons_container: Control
 
-func _init(toolbar_root: Control, action_callback: Callable) -> void:
-	on_action_pressed = action_callback
+func _init(toolbar_root: Control) -> void:
 	skip_btn = toolbar_root.get_node("HBox/SkipButton")
 	end_turn_btn = toolbar_root.get_node("HBox/EndTurnButton")
 	next_unit_btn = toolbar_root.get_node("HBox/NextUnitButton")
@@ -41,7 +40,7 @@ func update(selected_unit: Unit, mode_active: bool, all_finished: bool) -> void:
 		var btn := Button.new()
 		btn.text = action_name
 		btn.disabled = not selected_unit.can_act()
-		btn.pressed.connect(on_action_pressed.bind(action_name))
+		btn.pressed.connect(func(): action_pressed.emit(action_name))
 		action_buttons_container.add_child(btn)
 
 func clear_action_buttons() -> void:

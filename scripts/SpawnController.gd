@@ -1,25 +1,17 @@
 extends RefCounted
 class_name SpawnController
 
+signal state_changed
+signal spawn_started
+signal action_completed
+
 const SOLDIER_SCENE := preload("res://scenes/Soldier.tscn")
-
-const RESOURCE_BONUSES := {
-	TileGrid.ResourceType.ROCK: {"stat": "armor", "amount": 1},
-	TileGrid.ResourceType.TREE: {"stat": "attack_range", "amount": 1},
-	TileGrid.ResourceType.ORE: {"stat": "damage", "amount": 1},
-	TileGrid.ResourceType.BERRIES: {"stat": "movement_range", "amount": 1},
-	TileGrid.ResourceType.WATER: {"stat": "armor_regen", "amount": 1},
-}
-
 
 var tile_grid: TileGrid
 var turn_manager: TurnManager
 var base_placement: BasePlacementController
 var highlighter: GridHighlighter
 var parent_node: Node
-var on_state_changed: Callable
-var on_spawn_started: Callable
-var on_action_completed: Callable
 
 var in_spawn_mode := false
 var spawn_valid_cells: Array[Vector2i] = []
@@ -30,15 +22,20 @@ var consume_valid_cells: Array[Vector2i] = []
 var consume_highlight_nodes: Array[Sprite2D] = []
 var pending_soldier: Soldier = null
 
-func _init(grid: TileGrid, tm: TurnManager, placement: BasePlacementController, grid_highlighter: GridHighlighter, root: Node, state_changed_callback: Callable, spawn_started_callback: Callable, action_completed_callback: Callable) -> void:
+const RESOURCE_BONUSES := {
+	TileGrid.ResourceType.ROCK: {"stat": "armor", "amount": 1},
+	TileGrid.ResourceType.TREE: {"stat": "attack_range", "amount": 1},
+	TileGrid.ResourceType.ORE: {"stat": "damage", "amount": 1},
+	TileGrid.ResourceType.BERRIES: {"stat": "movement_range", "amount": 1},
+	TileGrid.ResourceType.WATER: {"stat": "armor_regen", "amount": 1},
+}
+
+func _init(grid: TileGrid, tm: TurnManager, placement: BasePlacementController, grid_highlighter: GridHighlighter, root: Node) -> void:
 	tile_grid = grid
 	turn_manager = tm
 	base_placement = placement
 	highlighter = grid_highlighter
 	parent_node = root
-	on_state_changed = state_changed_callback
-	on_spawn_started = spawn_started_callback
-	on_action_completed = action_completed_callback
 
 func compute_spawn_area(center: Vector2i, range_points: int) -> Array[Vector2i]:
 	var cells: Array[Vector2i] = []
@@ -62,7 +59,7 @@ func compute_resource_area(center: Vector2i, range_points: int) -> Array[Vector2
 	return cells
 
 func enter_spawn_mode() -> void:
-	on_spawn_started.call()  # ensures move mode is cleared first
+	spawn_started.emit() # ensures move mode is cleared first
 	var selected_unit := turn_manager.selected_unit
 	if selected_unit == null or not selected_unit.can_act():
 		return
@@ -70,7 +67,7 @@ func enter_spawn_mode() -> void:
 	spawn_valid_cells = compute_spawn_area(selected_unit.grid_position, selected_unit.action_range)
 	for cell in spawn_valid_cells:
 		spawn_highlight_nodes.append(highlighter.create_highlight(cell, Color(0.4, 0.6, 1.0)))
-	on_state_changed.call()
+	state_changed.emit()
 
 func place_soldier(cell: Vector2i) -> void:
 	var soldier: Soldier = SOLDIER_SCENE.instantiate()
@@ -93,15 +90,15 @@ func clear_spawn_highlights() -> void:
 
 func exit_spawn_mode() -> void:
 	clear_spawn_highlights()
-	on_action_completed.call()
-	on_state_changed.call()
+	action_completed.emit()
+	state_changed.emit()
 
 func enter_consume_mode() -> void:
 	in_consume_mode = true
 	consume_valid_cells = compute_resource_area(pending_soldier.grid_position, pending_soldier.collection_range)
 	for cell in consume_valid_cells:
 		consume_highlight_nodes.append(highlighter.create_highlight(cell, Color(1.0, 0.65, 0.2)))
-	on_state_changed.call()
+	state_changed.emit()
 
 func exit_consume_mode(cancelled: bool) -> void:
 	in_consume_mode = false
@@ -113,8 +110,8 @@ func exit_consume_mode(cancelled: bool) -> void:
 		pending_soldier = null
 		enter_spawn_mode()
 	else:
-		on_action_completed.call()
-	on_state_changed.call()
+		action_completed.emit()
+	state_changed.emit()
 
 func consume_resource(cell: Vector2i) -> void:
 	var resource := tile_grid.get_resource_at(cell)

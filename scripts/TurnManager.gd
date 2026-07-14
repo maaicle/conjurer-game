@@ -1,15 +1,14 @@
 extends RefCounted
 class_name TurnManager
 
-var units_root: Node
-var on_selection_changed: Callable
+signal selection_changed
 
+var units_root: Node
 var selected_unit: Unit = null
 var turn_number: int = 1
 
-func _init(root: Node, selection_changed_callback: Callable) -> void:
+func _init(root: Node) -> void:
 	units_root = root
-	on_selection_changed = selection_changed_callback
 
 func get_unit_at(cell: Vector2i) -> Unit:
 	for unit in units_root.get_children():
@@ -23,7 +22,7 @@ func select_unit(unit: Unit) -> void:
 	selected_unit = unit
 	selected_unit.set_selected(true)
 	print("Selected unit at ", unit.grid_position)
-	on_selection_changed.call()
+	selection_changed.emit()
 
 func try_select_unit_at(cell: Vector2i) -> bool:
 	var clicked_unit := get_unit_at(cell)
@@ -41,7 +40,7 @@ func auto_select_unit() -> void:
 		selected_unit.set_selected(false)
 	selected_unit = null
 	print("  No units available to auto-select.")
-	on_selection_changed.call()
+	selection_changed.emit()
 
 func select_next_unit() -> void:
 	var units: Array[Unit] = []
